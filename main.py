@@ -2,6 +2,7 @@
 Discord all-in-one бот (discord.py 2.4+)
 Приветствия, журнал, бэкап, анти-краш, анти-ссылки, анти-бот, браки,
 заявки с кнопками, AFK по неактиву, права команд и панель /settings.
+(Модифицирован под чёрную тему эмбедов)
 """
 import asyncio, copy, datetime as dt, json, os, re, sqlite3, time
 from collections import defaultdict, deque
@@ -12,7 +13,7 @@ from discord.ext import tasks, commands
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 UTC = dt.timezone.utc
-BLURPLE = 0x5865F2
+BLACK = 0x000000  # Чёрный цвет для всех эмбедов
 DANGER = discord.Permissions(administrator=True, manage_guild=True, manage_roles=True,
                              manage_channels=True, ban_members=True, kick_members=True,
                              manage_webhooks=True).value
@@ -20,9 +21,9 @@ DANGER = discord.Permissions(administrator=True, manage_guild=True, manage_roles
 WELCOME_DEF = {"enabled": False, "channel": None, "embed": True, "plain": "",
                "title": "Добро пожаловать!",
                "description": "{user.mention}, рады видеть тебя на **{server}**!\nТы {count}-й участник.",
-               "color": "#5865F2", "image": "", "thumbnail": "user", "footer": "", "dm": False, "autorole": None}
+               "color": "#000000", "image": "", "thumbnail": "user", "footer": "", "dm": False, "autorole": None}
 GOODBYE_DEF = {**WELCOME_DEF, "title": "До встречи!",
-               "description": "**{user.name}** покинул(а) **{server}**.", "color": "#ED4245"}
+               "description": "**{user.name}** покинул(а) **{server}**.", "color": "#000000"}
 
 DEFAULTS = {
     "setup_done": False,
@@ -49,7 +50,6 @@ DEFAULTS = {
     "fun": {"enabled": True},
 }
 
-# права по умолчанию, если роли для команды не настроены
 DEFAULT_PERM = {"settings": "administrator", "setup": "administrator", "backup": "administrator",
                 "ban": "ban_members", "kick": "kick_members", "timeout": "moderate_members",
                 "clear": "manage_messages"}
@@ -111,7 +111,7 @@ def parse_color(s):
     try:
         return int(str(s).lstrip("#"), 16)
     except ValueError:
-        return BLURPLE
+        return BLACK
 
 
 # ───────────────────────── Bot ─────────────────────────
@@ -125,7 +125,7 @@ class Tree(app_commands.CommandTree):
         ok = True
         if p.administrator:
             ok = True
-        elif allowed:  # роли заданы в /settings → только они
+        elif allowed:
             ok = any(r.id in allowed for r in i.user.roles)
         elif root in DEFAULT_PERM:
             ok = getattr(p, DEFAULT_PERM[root])
@@ -186,6 +186,7 @@ async def send_log(g, embed, event=None):
     ch = g.get_channel(c["channel"] or 0)
     if ch:
         embed.timestamp = embed.timestamp or now()
+        embed.color = BLACK
         try:
             await ch.send(embed=embed)
         except discord.HTTPException:
@@ -205,8 +206,8 @@ async def audit(g, action, target_id=None, within=10):
     return None
 
 
-def log_embed(title, color, **fields):
-    e = discord.Embed(title=title, color=color)
+def log_embed(title, color=BLACK, **fields):
+    e = discord.Embed(title=title, color=BLACK)
     for k, v in fields.items():
         e.add_field(name=k.replace("_", " "), value=str(v)[:1024] or "—", inline=True)
     return e
@@ -216,7 +217,7 @@ def log_embed(title, color, **fields):
 async def _log_del(m: discord.Message):
     if not m.guild or m.author.bot:
         return
-    e = discord.Embed(title="🗑 Сообщение удалено", color=0xED4245,
+    e = discord.Embed(title="🗑 Сообщение удалено", color=BLACK,
                       description=(m.content or "*без текста*")[:4000])
     e.add_field(name="Автор", value=f"{m.author.mention} (`{m.author.id}`)")
     e.add_field(name="Канал", value=m.channel.mention)
@@ -232,7 +233,7 @@ async def _log_del(m: discord.Message):
 async def _log_edit(a: discord.Message, b: discord.Message):
     if not a.guild or a.author.bot or a.content == b.content:
         return
-    e = discord.Embed(title="✏️ Сообщение изменено", color=0xFEE75C, url=b.jump_url)
+    e = discord.Embed(title="✏️ Сообщение изменено", color=BLACK, url=b.jump_url)
     e.add_field(name="Автор", value=f"{a.author.mention} (`{a.author.id}`)")
     e.add_field(name="Канал", value=a.channel.mention)
     e.add_field(name="Было", value=(a.content or "—")[:1024], inline=False)
@@ -246,7 +247,7 @@ async def _log_member(a: discord.Member, b: discord.Member):
     if a.roles != b.roles:
         add = [r for r in b.roles if r not in a.roles]
         rem = [r for r in a.roles if r not in b.roles]
-        e = discord.Embed(title="🎭 Роли изменены", color=0x5865F2)
+        e = discord.Embed(title="🎭 Роли изменены", color=BLACK)
         e.add_field(name="Участник", value=b.mention)
         if add:
             e.add_field(name="Выданы", value=" ".join(r.mention for r in add))
@@ -257,7 +258,7 @@ async def _log_member(a: discord.Member, b: discord.Member):
             e.add_field(name="Кем", value=ent.user.mention)
         await send_log(g, e, "roles")
     if a.nick != b.nick:
-        e = discord.Embed(title="📝 Ник изменён", color=0x5865F2)
+        e = discord.Embed(title="📝 Ник изменён", color=BLACK)
         e.add_field(name="Участник", value=b.mention)
         e.add_field(name="Было", value=a.nick or "—")
         e.add_field(name="Стало", value=b.nick or "—")
@@ -266,9 +267,7 @@ async def _log_member(a: discord.Member, b: discord.Member):
 
 @bot.listen("on_voice_state_update")
 async def _log_voice(m, a, b):
-    if a.channel == b.channel:
-        return
-    if m.bot:
+    if a.channel == b.channel or m.bot:
         return
     bot.written.pop((m.guild.id, m.id), None)
     touch(m.guild.id, m.id)
@@ -278,42 +277,42 @@ async def _log_voice(m, a, b):
         t = f"🔇 вышел из {a.channel.mention}"
     else:
         t = f"🔁 {a.channel.mention} → {b.channel.mention}"
-    await send_log(m.guild, discord.Embed(description=f"{m.mention} {t}", color=0x99AAB5), "voice")
+    await send_log(m.guild, discord.Embed(description=f"{m.mention} {t}", color=BLACK), "voice")
 
 
 @bot.listen("on_guild_channel_create")
 async def _ch_create(ch):
-    await send_log(ch.guild, discord.Embed(title="📁 Канал создан", color=0x57F287,
+    await send_log(ch.guild, discord.Embed(title="📁 Канал создан", color=BLACK,
                                            description=f"{ch.mention} (`{ch.name}`)"), "channels")
 
 
 @bot.listen("on_guild_channel_delete")
 async def _ch_delete(ch):
     bot.snap[(ch.guild.id, ch.id)] = ser_channel(ch)
-    await send_log(ch.guild, discord.Embed(title="🗑 Канал удалён", color=0xED4245,
+    await send_log(ch.guild, discord.Embed(title="🗑 Канал удалён", color=BLACK,
                                            description=f"`{ch.name}`"), "channels")
 
 
 @bot.listen("on_guild_role_create")
 async def _r_create(r):
-    await send_log(r.guild, discord.Embed(title="➕ Роль создана", color=0x57F287, description=r.mention), "channels")
+    await send_log(r.guild, discord.Embed(title="➕ Роль создана", color=BLACK, description=r.mention), "channels")
 
 
 @bot.listen("on_guild_role_delete")
 async def _r_delete(r):
     bot.snap[(r.guild.id, r.id)] = ser_role(r)
-    await send_log(r.guild, discord.Embed(title="➖ Роль удалена", color=0xED4245, description=f"`{r.name}`"),
+    await send_log(r.guild, discord.Embed(title="➖ Роль удалена", color=BLACK, description=f"`{r.name}`"),
                    "channels")
 
 
 @bot.listen("on_member_ban")
 async def _ban(g, u):
-    await send_log(g, discord.Embed(title="🔨 Бан", color=0xED4245, description=f"{u} (`{u.id}`)"), "bans")
+    await send_log(g, discord.Embed(title="🔨 Бан", color=BLACK, description=f"{u} (`{u.id}`)"), "bans")
 
 
 @bot.listen("on_member_unban")
 async def _unban(g, u):
-    await send_log(g, discord.Embed(title="♻️ Разбан", color=0x57F287, description=f"{u} (`{u.id}`)"), "bans")
+    await send_log(g, discord.Embed(title="♻️ Разбан", color=BLACK, description=f"{u} (`{u.id}`)"), "bans")
 
 
 # ───────────────────────── Приветствия ─────────────────────────
@@ -327,7 +326,7 @@ def build_msg(c, m):
     content = fmt(c["plain"], m) or None
     if not c["embed"]:
         return content or fmt(c["description"], m), None
-    e = discord.Embed(title=fmt(c["title"], m)[:256] or None, color=parse_color(c["color"]),
+    e = discord.Embed(title=fmt(c["title"], m)[:256] or None, color=BLACK,
                       description=fmt(c["description"], m)[:4000] or None, timestamp=now())
     if not e.title and not e.description:
         e.description = "\u200b"
@@ -350,7 +349,7 @@ async def _join(m: discord.Member):
     g, c = m.guild, bot.cfg(m.guild.id)
     if m.bot:
         return await handle_bot_join(m)
-    await send_log(g, log_embed("📥 Вход", 0x57F287, Участник=f"{m.mention} (`{m.id}`)",
+    await send_log(g, log_embed("📥 Вход", BLACK, Участник=f"{m.mention} (`{m.id}`)",
                                 Аккаунт=f"<t:{int(m.created_at.timestamp())}:R>"), "member_join")
     w = c["welcome"]
     if w["autorole"]:
@@ -375,7 +374,7 @@ async def _join(m: discord.Member):
 @bot.listen("on_member_remove")
 async def _leave(m: discord.Member):
     g, c = m.guild, bot.cfg(m.guild.id)
-    await send_log(g, log_embed("📤 Выход", 0xED4245, Участник=f"{m} (`{m.id}`)"), "member_leave")
+    await send_log(g, log_embed("📤 Выход", BLACK, Участник=f"{m} (`{m.id}`)"), "member_leave")
     w = c["goodbye"]
     ch = g.get_channel(w["channel"] or 0)
     if w["enabled"] and ch and not m.bot:
@@ -559,7 +558,7 @@ async def punish(g, user_id, mode, reason):
             await m.remove_roles(*bad, reason=reason)
     except discord.HTTPException:
         pass
-    await send_log(g, log_embed("🚨 Анти-краш", 0xED4245, Нарушитель=f"<@{user_id}>",
+    await send_log(g, log_embed("🚨 Анти-краш", BLACK, Нарушитель=f"<@{user_id}>",
                                 Наказание=mode, Причина=reason))
 
 
@@ -607,7 +606,7 @@ async def handle_bot_join(m: discord.Member):
         await m.kick(reason="Анти-бот: бот не в белом списке")
     except discord.HTTPException:
         pass
-    await send_log(g, log_embed("🤖 Анти-бот", 0xED4245, Бот=f"{m} (`{m.id}`)",
+    await send_log(g, log_embed("🤖 Анти-бот", BLACK, Бот=f"{m} (`{m.id}`)",
                                 Добавил=inviter.mention if inviter else "неизвестно", Действие="бот кикнут"))
     if c["punish_inviter"] and inviter:
         await punish(g, inviter.id, bot.cfg(g.id)["anticrash"]["punish"], "Добавил бота вне белого списка")
@@ -677,7 +676,7 @@ async def _on_message(m: discord.Message):
             await a.timeout(dt.timedelta(minutes=c["timeout"]), reason="Анти-ссылки")
         except discord.HTTPException:
             pass
-    await send_log(m.guild, log_embed("🔗 Анти-ссылки", 0xFEE75C, Автор=a.mention, Канал=m.channel.mention,
+    await send_log(m.guild, log_embed("🔗 Анти-ссылки", BLACK, Автор=a.mention, Канал=m.channel.mention,
                                       Текст=m.content[:500], Действие=c["action"]))
 
 
@@ -714,7 +713,7 @@ def can_review(m: discord.Member):
 
 class OpenApp(discord.ui.DynamicItem[discord.ui.Button], template=r"app:open:(?P<i>\d+)"):
     def __init__(self, idx, label="Подать заявку"):
-        super().__init__(discord.ui.Button(label=label[:80], style=discord.ButtonStyle.primary,
+        super().__init__(discord.ui.Button(label=label[:80], style=discord.ButtonStyle.secondary,
                                            custom_id=f"app:open:{idx}", emoji="📨"))
         self.idx = idx
 
@@ -753,7 +752,7 @@ class ApplyModal(discord.ui.Modal):
                              (i.guild.id, i.user.id, self.t["name"], json.dumps(ans), "pending", time.time()))
         bot.db.commit()
         app_id = cur.lastrowid
-        e = discord.Embed(title=f"📨 Заявка #{app_id}: {self.t['name']}", color=0xFEE75C, timestamp=now(),
+        e = discord.Embed(title=f"📨 Заявка #{app_id}: {self.t['name']}", color=BLACK, timestamp=now(),
                           description=f"{i.user.mention} (`{i.user.id}`)")
         e.set_author(name=str(i.user), icon_url=i.user.display_avatar.url)
         for q, v in ans:
@@ -773,7 +772,7 @@ async def finish_app(i: discord.Interaction, app_id, status, reason=""):
     bot.db.commit()
     ok = status == "accepted"
     e = i.message.embeds[0]
-    e.color = 0x57F287 if ok else 0xED4245
+    e.color = BLACK
     e.add_field(name="Решение", value=("✅ Одобрена" if ok else "❌ Отклонена") + (f"\nПричина: {reason}" if reason else ""),
                 inline=False)
     e.set_footer(text=f"Рассмотрел: {i.user}")
@@ -840,7 +839,7 @@ async def update_panel(g, force=False):
     ch = g.get_channel(a["panel_channel"] or 0)
     if not ch or not a["types"]:
         return
-    e = discord.Embed(title=a["panel_title"], description=a["panel_text"], color=BLURPLE)
+    e = discord.Embed(title=a["panel_title"], description=a["panel_text"], color=BLACK)
     v = discord.ui.View(timeout=None)
     for idx, t in enumerate(a["types"][:25]):
         v.add_item(OpenApp(idx, t["name"]))
@@ -890,7 +889,7 @@ async def setup_guild(g: discord.Guild, force=False):
         welcome = await g.create_text_channel("приветствие", category=cat, overwrites=ro)
         panel = await g.create_text_channel("подать-заявку", category=cat, overwrites=ro)
         review = await g.create_text_channel("заявки-рассмотрение", category=cat, overwrites=priv)
-        afk = await g.create_role(name="AFK", colour=discord.Colour(0x99AAB5), reason="Авто-настройка")
+        afk = await g.create_role(name="AFK", colour=discord.Colour(0x000000), reason="Авто-настройка")
     except discord.HTTPException:
         return False
     c["logs"]["channel"] = logs.id
@@ -1063,6 +1062,7 @@ class Panel(discord.ui.View):
 
     def embed(self):
         e = SECTIONS[self.section][0](self)
+        e.color = BLACK
         e.set_footer(text=f"{self.guild.name} • настройки сохраняются автоматически")
         return e
 
@@ -1080,7 +1080,7 @@ class Panel(discord.ui.View):
 
 
 def emb(title, desc=""):
-    return discord.Embed(title=title, description=desc, color=BLURPLE)
+    return discord.Embed(title=title, description=desc, color=BLACK)
 
 
 # ── разделы ──
